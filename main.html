@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synced Video Player</title>
+    <style>
+        video { width: 48%; }
+        .container { display: flex; justify-content: space-between; }
+        .transcript-container {
+            height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 20px;
+        }
+        .transcript-line {
+            padding: 4px;
+            cursor: pointer;
+        }
+        .transcript-line.active {
+            background-color: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <h2>Synced Video Player</h2>
+    <input type="file" id="videoWithAudioInput" accept="video/*">
+    <input type="file" id="videoWithoutAudioInput" accept="video/*">
+    <input type="file" id="subtitleInput" accept=".srt">
+    
+    <div class="subtitle-controls">
+        <label for="subtitleDelay">Subtitle Delay (seconds):</label>
+        <input type="number" id="subtitleDelay" step="0.1" value="0">
+        
+        <label for="subtitleStretch">Subtitle Stretch Factor:</label>
+        <input type="number" id="subtitleStretch" step="0.0001" value="1.0000" min="0.5" max="2.0">
+        
+        <button id="applySubtitleSettings">Apply</button>
+        <button id="toggleSubtitles">Toggle Subtitles</button>
+        <!-- <a href="chrome-extension://lmppdpldfpfdlipofacekcfleacbbncp/popup/popup.html" id="openExtension2">Open Extension</button> -->
+    </div>
+    
+    <div class="container">
+        <video id="videoWithAudio" controls>
+            <track id="subtitleTrack" kind="subtitles" srclang="en" label="English" default>
+        </video>
+        <video id="videoWithoutAudio" muted></video>
+    </div>
+    
+    <div id="transcript" class="transcript-container"></div>
+    
+    <script>
+        const videoWithAudio = document.getElementById("videoWithAudio");
+        const videoWithoutAudio = document.getElementById("videoWithoutAudio");
+        const subtitleTrack = document.getElementById("subtitleTrack");
+        const transcriptContainer = document.getElementById("transcript");
+        const toggleSubtitlesBtn = document.getElementById("toggleSubtitles");
+        const seekAmount = 5; // Adjust arrow key seek time in seconds
+        
+        // Subtitle timing control variables
+        const subtitleDelayInput = document.getElementById("subtitleDelay");
+        const subtitleStretchInput = document.getElementById("subtitleStretch");
+        const applySubtitleSettingsBtn = document.getElementById("applySubtitleSettings");
+        let subtitleDelay = 0;
+        let subtitleStretch = 1.0;
+        let originalSrtContent = "";
+        let currentSubtitleIndex = -1;
+
+        document.getElementById("videoWithAudioInput").addEventListener("change", function(event) {
+            videoWithAudio.src = URL.createObjectURL(event.target.files[0]);
+        });
+
+        document.getElementById("videoWithoutAudioInput").addEventListener("change", function(event) {
+            videoWithoutAudio.src = URL.createObjectURL(event.target.files[0]);
+        });
+
+        toggleSubtitlesBtn.addEventListener("click", () => {
+            if (subtitleTrack.track.mode === "showing") {
+                subtitleTrack.track.mode = "hidden";
+                toggleSubtitlesBtn.textContent = "Show Subtitles";
+            } else {
+                subtitleTrack.track.mode = "showing";
+                toggleSubtitlesBtn.textContent = "Hide Subtitles";
+            }
+        });
+
+        function updateTranscript(srtContent) {
+            subtitles = parseSRT(srtContent);
+            transcriptContainer.innerHTML = subtitles
+                .map((sub, index) => `<div class="transcript-line" data-index="${index}">${sub.text}</div>`)
+                .join("");
+            
+            // Add click handlers to transcript lines
+            document.querySelectorAll('.transcript-line').forEach(line => {
+                line.addEventListener('click', () => {
+                    const index = parseInt(line.dataset.index);
+                    videoWithAudio.currentTime = subtitles[index].startTime;
+                });
+            });
+        }
+
+        function parseSRT(srtContent) {
+            const parsed = [];
+            const blocks = srtContent.trim().split('\n\n');
+            
+            blocks.forEach(block => {
+                const lines = block.split('\n');
+                if (lines.length >= 3) {
+                    const times = lines[1].match(/(\d{2}):(\d{2}):(\d{2}),(\d{3}) --> (\d{2}):(\d{2}):(\d{2}),(\d{3})/);
+                    if (times) {
+                        const startTime = parseInt(times[1]) * 3600 + parseInt(times[2]) * 60 + parseInt(times[3]) + parseInt(times[4]) / 1000;
+                        const text = lines.slice(2).join('\n');
+                        parsed.push({ startTime, text });
+                    }
+                }
+            });
+            return parsed;
+        }
+
+        function updateActiveTranscriptLine() {
+            const currentTime = videoWithAudio.currentTime;
+            const newIndex = subtitles.findIndex((sub, index) => {
+                const nextSub = subtitles[index + 1];
+                return currentTime >= sub.startTime && (!nextSub || currentTime < nextSub.startTime);
+            });
+
+            if (newIndex !== currentSubtitleIndex && newIndex !== -1) {
+                document.querySelectorAll('.transcript-line').forEach(el => el.classList.remove('active'));
+                const activeLine = document.querySelector(`.transcript-line[data-index="${newIndex}"]`);
+                if (activeLine) {
+                    activeLine.classList.add('active');
+                    activeLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                currentSubtitleIndex = newIndex;
+            }
+        }
+
+        // Modify the existing subtitle input handler
+        document.getElementById("subtitleInput").addEventListener("change", function(event) {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                originalSrtContent = e.target.result;
+                updateTranscript(originalSrtContent);
+                applySubtitleSettings();
+            };
+            reader.readAsText(file);
+        });
+
+        // Add timeupdate listener for transcript tracking
+        videoWithAudio.addEventListener("timeupdate", updateActiveTranscriptLine);
+
+        applySubtitleSettingsBtn.addEventListener("click", applySubtitleSettings);
+
+        function applySubtitleSettings() {
+            if (!originalSrtContent) return;
+            
+            subtitleDelay = parseFloat(subtitleDelayInput.value) || 0;
+            subtitleStretch = parseFloat(subtitleStretchInput.value) || 1.0;
+            
+            const vttData = convertSRTtoVTT(originalSrtContent, subtitleDelay, subtitleStretch);
+            const blob = new Blob([vttData], { type: "text/vtt" });
+            subtitleTrack.src = URL.createObjectURL(blob);
+            subtitleTrack.track.mode = "showing";
+        }
+
+        function convertSRTtoVTT(data, delay = 0, stretch = 1.0) {
+            console.log("Original SRT data:", data);
+            let vtt = "WEBVTT\n\n" + data
+                .replace(/(\d+)\n(\d{2}):(\d{2}):(\d{2}),(\d{3}) --> (\d{2}):(\d{2}):(\d{2}),(\d{3})/g, 
+                         (match, id, h1, m1, s1, ms1, h2, m2, s2, ms2) => {
+                             console.log("Match found:", match);
+                             
+                             // Convert timestamps to seconds
+                             let startTime = parseInt(h1) * 3600 + parseInt(m1) * 60 + parseInt(s1) + parseInt(ms1) / 1000;
+                             let endTime = parseInt(h2) * 3600 + parseInt(m2) * 60 + parseInt(s2) + parseInt(ms2) / 1000;
+                             
+                             // Apply stretch and delay
+                             startTime = startTime * stretch + delay;
+                             endTime = endTime * stretch + delay;
+                             
+                             // Convert back to timestamp format
+                             let newH1 = Math.floor(startTime / 3600).toString().padStart(2, '0');
+                             let newM1 = Math.floor((startTime % 3600) / 60).toString().padStart(2, '0');
+                             let newS1 = Math.floor(startTime % 60).toString().padStart(2, '0');
+                             let newMs1 = Math.floor((startTime % 1) * 1000).toString().padStart(3, '0');
+                             
+                             let newH2 = Math.floor(endTime / 3600).toString().padStart(2, '0');
+                             let newM2 = Math.floor((endTime % 3600) / 60).toString().padStart(2, '0');
+                             let newS2 = Math.floor(endTime % 60).toString().padStart(2, '0');
+                             let newMs2 = Math.floor((endTime % 1) * 1000).toString().padStart(3, '0');
+                             
+                             console.log("Adjusted timestamp:", `${newH1}:${newM1}:${newS1}.${newMs1} --> ${newH2}:${newM2}:${newS2}.${newMs2}`);
+                             return `${id}\n${newH1}:${newM1}:${newS1}.${newMs1} --> ${newH2}:${newM2}:${newS2}.${newMs2}`;
+                         });
+            console.log("Converted VTT data:", vtt);
+            return vtt;
+        }
+
+        function syncVideos() {
+            videoWithoutAudio.currentTime = videoWithAudio.currentTime;
+            // Removed the line that forces subtitles to show
+        }
+
+        videoWithAudio.addEventListener("play", () => {
+            videoWithoutAudio.play();
+            syncVideos();
+        });
+        videoWithAudio.addEventListener("pause", () => videoWithoutAudio.pause());
+        videoWithAudio.addEventListener("ratechange", () => videoWithoutAudio.playbackRate = videoWithAudio.playbackRate);
+        videoWithAudio.addEventListener("seeked", syncVideos);
+        videoWithAudio.addEventListener("timeupdate", syncVideos);
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "ArrowRight") {
+                videoWithAudio.currentTime += seekAmount;
+                syncVideos();
+            } else if (event.key === "ArrowLeft") {
+                videoWithAudio.currentTime -= seekAmount;
+                syncVideos();
+            } else if (event.key === " " && !event.target.matches("input")) {
+                // Spacebar for play/pause, but only if not typing in an input field
+                event.preventDefault(); // Prevent page scrolling
+                if (videoWithAudio.paused) {
+                    videoWithAudio.play();
+                } else {
+                    videoWithAudio.pause();
+                }
+            }
+        });
+        document.getElementById("openExtension").addEventListener("click", function() {
+            window.open("chrome-extension://lmppdpldfpfdlipofacekcfleacbbncp/popup/popup.html", "_blank", "width=400,height=600");
+        });
+    </script>
+</body>
+</html>
