@@ -118,6 +118,27 @@
             return parsed;
         }
 
+        function scrollParentToChild(parent, child) {
+            // Get the parent's dimensions and position
+            const parentRect = parent.getBoundingClientRect();
+            const parentHeight = parent.clientHeight;
+            
+            // Get the child's dimensions and position
+            const childRect = child.getBoundingClientRect();
+            const childHeight = child.offsetHeight;
+            
+            // Calculate the position that would center the child in the parent
+            const childRelativeTop = childRect.top - parentRect.top;
+            const targetScrollTop = parent.scrollTop + childRelativeTop - (parentHeight/2) + (childHeight/2);
+            
+            // Smoothly scroll to center the child
+            parent.scrollTo({
+                top: targetScrollTop,
+                behavior: 'smooth'
+            });
+        }
+
+
         function updateActiveTranscriptLine() {
             const currentTime = videoWithAudio.currentTime;
             const newIndex = subtitles.findIndex((sub, index) => {
@@ -130,7 +151,7 @@
                 const activeLine = document.querySelector(`.transcript-line[data-index="${newIndex}"]`);
                 if (activeLine) {
                     activeLine.classList.add('active');
-                    activeLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    scrollParentToChild(transcriptContainer, activeLine);
                 }
                 currentSubtitleIndex = newIndex;
             }
