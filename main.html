@@ -98,6 +98,37 @@
                     videoWithAudio.currentTime = subtitles[index].startTime;
                 });
             });
+            
+            // Add keyboard navigation for transcript
+            transcriptContainer.tabIndex = 0; // Make the container focusable
+            transcriptContainer.addEventListener('keydown', (event) => {
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    event.preventDefault(); // Prevent default scrolling
+                    
+                    // Find the current active line or use the first one
+                    const activeLine = document.querySelector('.transcript-line.active') || 
+                                       document.querySelector('.transcript-line');
+                    if (!activeLine) return;
+                    
+                    const currentIndex = parseInt(activeLine.dataset.index);
+                    let newIndex;
+                    
+                    if (event.key === 'ArrowDown' && currentIndex < subtitles.length - 1) {
+                        newIndex = currentIndex + 1;
+                    } else if (event.key === 'ArrowUp' && currentIndex > 0) {
+                        newIndex = currentIndex - 1;
+                    } else {
+                        return; // No valid navigation
+                    }
+                    
+                    // Simulate clicking the new line
+                    const newLine = document.querySelector(`.transcript-line[data-index="${newIndex}"]`);
+                    if (newLine) {
+                        newLine.click();
+                        newLine.focus(); // Optional: focus the new line for accessibility
+                    }
+                }
+            });
         }
 
         function parseSRT(srtContent) {
