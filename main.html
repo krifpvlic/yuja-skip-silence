@@ -15,12 +15,55 @@
             margin-top: 20px;
         }
         .transcript-line {
-            padding: 4px;
-            cursor: pointer;
-        }
+        padding: 4px;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
         .transcript-line.active {
             background-color: #e0e0e0;
         }
+        .bookmark-circle {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        cursor: pointer;
+        border: 2px solid transparent;
+    }
+    .bookmark-circle:hover {
+        border-color: #666;
+    }
+    .bookmark-notes {
+        position: absolute;
+        right: 30px;
+        background: white;
+        border: 1px solid #ccc;
+        padding: 10px;
+        border-radius: 4px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        z-index: 1000;
+    }
+    .bookmark-notes textarea {
+        width: 200px;
+        height: 100px;
+        margin-bottom: 10px;
+    }
+    .color-picker {
+        display: flex;
+        gap: 5px;
+        margin-bottom: 10px;
+    }
+    .color-option {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        cursor: pointer;
+        border: 2px solid transparent;
+    }
+    .color-option:hover {
+        border-color: #666;
+    }
     </style>
 </head>
 <body>
@@ -121,6 +164,8 @@
                     }
                 }
             }
+            await loadBookmarks();
+
             
             // Load the files if found
             if (pci0File && pci1File && srtFile) {
@@ -266,19 +311,69 @@
             }
         });
 
+        // Add bookmark-related variables
+        let bookmarks = {};
+        const defaultBookmarkColor = '#87CEEB'; // light blue
+        const bookmarkColors = ['#87CEEB', '#90EE90', '#FFB6C1', '#DDA0DD', '#F0E68C']; // light blue, light green, light pink, plum, khaki
+        
+        // Load bookmarks from bookmarks.json
+        async function loadBookmarks() {
+            if (!directoryHandle) return;
+            
+            try {
+                const bookmarksHandle = await directoryHandle.getFileHandle('bookmarks.json', { create: true });
+                const file = await bookmarksHandle.getFile();
+                const content = await file.text();
+                bookmarks = JSON.parse(content || '{}');
+                // updateTranscriptBookmarks();
+            } catch (error) {
+                console.error("Error loading bookmarks:", error);
+                bookmarks = {};
+            }
+        }
+        
+        // Save bookmarks to bookmarks.json
+        async function saveBookmarks() {
+            if (!directoryHandle) return;
+            
+            try {
+                const bookmarksHandle = await directoryHandle.getFileHandle('bookmarks.json', { create: true });
+                const writable = await bookmarksHandle.createWritable();
+                await writable.write(JSON.stringify(bookmarks, null, 2));
+                await writable.close();
+            } catch (error) {
+                console.error("Error saving bookmarks:", error);
+            }
+        }
+        
+        // Modify the updateTranscript function
         function updateTranscript(srtContent) {
             subtitles = parseSRT(srtContent);
             transcriptContainer.innerHTML = subtitles
-                .map((sub, index) => `<div class="transcript-line" data-index="${index}">${sub.text}</div>`)
-                .join("");
+                .map((sub, index) => `
+                    <div class="transcript-line" data-index="${index}">
+                        <span>${sub.text}</span>
+                        <div class="bookmark-circle" data-index="${index}" 
+                             style="background-color: ${bookmarks[index]?.color || 'transparent'}">
+                        </div>
+                    </div>
+                `).join("");
             
-            // Add click handlers to transcript lines
+            // Add click handlers for transcript lines and bookmarks
             document.querySelectorAll('.transcript-line').forEach(line => {
-                line.addEventListener('click', () => {
-                    const index = parseInt(line.dataset.index);
-                    // Apply the same delay and stretch factor as subtitles
+                const index = parseInt(line.dataset.index);
+                
+                // Text click handler
+                line.querySelector('span').addEventListener('click', () => {
                     const adjustedTime = subtitles[index].startTime * subtitleStretch + subtitleDelay;
                     videoWithAudio.currentTime = adjustedTime;
+                });
+                
+                // Bookmark click handler
+                const bookmarkCircle = line.querySelector('.bookmark-circle');
+                bookmarkCircle.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    handleBookmarkClick(index, bookmarkCircle);
                 });
             });
             
@@ -313,6 +408,79 @@
                 }
             });
         }
+
+
+function handleBookmarkClick(index, circle) {
+    if (bookmarks[index]) {
+        showBookmarkNotes(index, circle);
+    } else {
+        // Create new bookmark
+        bookmarks[index] = {
+            color: defaultBookmarkColor,
+            notes: ''
+        };
+        circle.style.backgroundColor = defaultBookmarkColor;
+        showBookmarkNotes(index, circle);
+        saveBookmarks();
+    }
+}
+
+function showBookmarkNotes(index, circle) {
+    const existingNotes = document.querySelector('.bookmark-notes');
+    if (existingNotes) existingNotes.remove();
+    
+    const notesDiv = document.createElement('div');
+    notesDiv.className = 'bookmark-notes';
+    notesDiv.innerHTML = `
+        <div class="color-picker">
+            ${bookmarkColors.map(color => 
+                `<div class="color-option" style="background-color: ${color}"></div>`
+            ).join('')}
+        </div>
+        <textarea placeholder="Add notes...">${bookmarks[index]?.notes || ''}</textarea>
+        <button>Save</button>
+        <button>Delete</button>
+    `;
+    
+    // Position the notes div
+    const rect = circle.getBoundingClientRect();
+    notesDiv.style.top = `${rect.top}px`;
+    document.body.appendChild(notesDiv);
+    
+    // Color picker handlers
+    notesDiv.querySelectorAll('.color-option').forEach(colorDiv => {
+        colorDiv.addEventListener('click', () => {
+            const color = colorDiv.style.backgroundColor;
+            bookmarks[index].color = color;
+            circle.style.backgroundColor = color;
+            saveBookmarks();
+        });
+    });
+    
+    // Save button handler
+    const [saveBtn, deleteBtn] = notesDiv.querySelectorAll('button');
+    saveBtn.addEventListener('click', () => {
+        bookmarks[index].notes = notesDiv.querySelector('textarea').value;
+        saveBookmarks();
+        notesDiv.remove();
+    });
+    
+    // Delete button handler
+    deleteBtn.addEventListener('click', () => {
+        delete bookmarks[index];
+        circle.style.backgroundColor = 'transparent';
+        saveBookmarks();
+        notesDiv.remove();
+    });
+    
+    // Click outside to close
+    document.addEventListener('click', function closeNotes(e) {
+        if (!notesDiv.contains(e.target) && e.target !== circle) {
+            notesDiv.remove();
+            document.removeEventListener('click', closeNotes);
+        }
+    });
+}
 
         function parseSRT(srtContent) {
             const parsed = [];
@@ -476,9 +644,9 @@
                 }
             }
         });
-        document.getElementById("openExtension").addEventListener("click", function() {
-            window.open("chrome-extension://lmppdpldfpfdlipofacekcfleacbbncp/popup/popup.html", "_blank", "width=400,height=600");
-        });
+        // document.getElementById("openExtension").addEventListener("click", function() {
+        //     window.open("chrome-extension://lmppdpldfpfdlipofacekcfleacbbncp/popup/popup.html", "_blank", "width=400,height=600");
+        // });
     </script>
 </body>
 </html>
