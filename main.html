@@ -7,12 +7,23 @@
     <style>
         video { width: 48%; }
         .container { display: flex; justify-content: space-between; }
+        .transcript-wrapper {
+        display: flex;
+        align-items: flex-start; /* Align items at the top */
+        position: relative;
+        margin-right: 15px; /* Add space for timeline */
+        border: 1px solid #ccc;
+
+        margin-top: 20px;
+    }
         .transcript-container {
             height: 200px;
             overflow-y: auto;
-            border: 1px solid #ccc;
             padding: 10px;
-            margin-top: 20px;
+            position: relative;
+            
+            flex-grow: 1; /* Allow transcript to take up remaining space */
+
         }
         .transcript-line {
         padding: 4px;
@@ -33,6 +44,22 @@
     }
     .bookmark-circle:hover {
         border-color: #666;
+    }
+    /* Add styles for the bookmark timeline */
+    .bookmark-timeline {
+        width: 5px;
+        height: 220px; /* Match container height */
+        background-color: #f0f0f0;
+        z-index: 10;
+        position: relative;
+    }
+    .timeline-marker {
+        position: absolute;
+        left: 0;
+        width: 5px;
+        height: 5px;
+        border-radius: 0;
+        cursor: pointer;
     }
     .bookmark-notes {
         position: absolute;
@@ -63,6 +90,26 @@
     }
     .color-option:hover {
         border-color: #666;
+    }
+    .bookmark-buttons {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 10px;
+    }
+    
+    .bookmark-buttons button {
+        flex: 1;
+        margin: 0 5px;
+        padding: 5px;
+        cursor: pointer;
+    }
+    
+    .bookmark-buttons button:first-child {
+        margin-left: 0;
+    }
+    
+    .bookmark-buttons button:last-child {
+        margin-right: 0;
     }
     </style>
 </head>
@@ -95,14 +142,18 @@
         </video>
         <video id="videoWithoutAudio" muted></video>
     </div>
-    
-    <div id="transcript" class="transcript-container"></div>
+    <div class="transcript-wrapper">
+        <div id="transcript" class="transcript-container"></div>
+        <div class="bookmark-timeline" id="bookmarkTimeline"></div>
+    </div>
+    </div>
     
     <script>
         const videoWithAudio = document.getElementById("videoWithAudio");
         const videoWithoutAudio = document.getElementById("videoWithoutAudio");
         const subtitleTrack = document.getElementById("subtitleTrack");
         const transcriptContainer = document.getElementById("transcript");
+        const bookmarkTimeline = document.getElementById("bookmarkTimeline");
         const toggleSubtitlesBtn = document.getElementById("toggleSubtitles");
         const seekAmount = 5; // Adjust arrow key seek time in seconds
         
@@ -325,7 +376,7 @@
                 const file = await bookmarksHandle.getFile();
                 const content = await file.text();
                 bookmarks = JSON.parse(content || '{}');
-                // updateTranscriptBookmarks();
+                updateBookmarkTimeline();
             } catch (error) {
                 console.error("Error loading bookmarks:", error);
                 bookmarks = {};
@@ -349,15 +400,17 @@
         // Modify the updateTranscript function
         function updateTranscript(srtContent) {
             subtitles = parseSRT(srtContent);
-            transcriptContainer.innerHTML = subtitles
-                .map((sub, index) => `
-                    <div class="transcript-line" data-index="${index}">
-                        <span>${sub.text}</span>
-                        <div class="bookmark-circle" data-index="${index}" 
-                             style="background-color: ${bookmarks[index]?.color || 'transparent'}">
+            transcriptContainer.innerHTML = `
+                ${subtitles
+                    .map((sub, index) => `
+                        <div class="transcript-line" data-index="${index}">
+                            <span>${sub.text}</span>
+                            <div class="bookmark-circle" data-index="${index}" 
+                                 style="background-color: ${bookmarks[index]?.color || 'transparent'}">
+                            </div>
                         </div>
-                    </div>
-                `).join("");
+                    `).join("")}
+            `;
             
             // Add click handlers for transcript lines and bookmarks
             document.querySelectorAll('.transcript-line').forEach(line => {
@@ -376,6 +429,9 @@
                     handleBookmarkClick(index, bookmarkCircle);
                 });
             });
+            
+            // Update the bookmark timeline
+            updateBookmarkTimeline();
             
             // Add keyboard navigation for transcript
             transcriptContainer.tabIndex = 0; // Make the container focusable
@@ -408,6 +464,44 @@
                 }
             });
         }
+        // Add a new function to update the bookmark timeline
+function updateBookmarkTimeline() {
+    const timeline = document.getElementById('bookmarkTimeline');
+    timeline.innerHTML = '';
+    
+    if (subtitles.length === 0) return;
+    
+    // Create markers for each bookmark
+    Object.keys(bookmarks).forEach(index => {
+        const i = parseInt(index);
+        if (i >= 0 && i < subtitles.length) {
+            const position = (i / subtitles.length) * 100;
+            const marker = document.createElement('div');
+            console.log("creating marker at position", position);
+            marker.className = 'timeline-marker';
+            const markerHeight = 5; // Set a consistent height for markers
+            marker.style.height = `${markerHeight}px`;
+            const adjustedPosition = (position * (100 - markerHeight/timeline.clientHeight*100)) / 100;
+            marker.style.top = `${adjustedPosition}%`;
+            marker.style.backgroundColor = bookmarks[i].color;
+            marker.dataset.index = i;
+
+            
+            // Add click handler to jump to the bookmark
+            marker.addEventListener('click', () => {
+                const adjustedTime = subtitles[i].startTime * subtitleStretch + subtitleDelay;
+                videoWithAudio.currentTime = adjustedTime;
+                
+                // Scroll to the corresponding transcript line
+                const line = document.querySelector(`.transcript-line[data-index="${i}"]`);
+                if (line) {
+                    scrollParentToChild(transcriptContainer, line);
+                }
+            });
+            timeline.appendChild(marker);
+        }
+    });
+}
 
 
 function handleBookmarkClick(index, circle) {
@@ -422,6 +516,7 @@ function handleBookmarkClick(index, circle) {
         circle.style.backgroundColor = defaultBookmarkColor;
         showBookmarkNotes(index, circle);
         saveBookmarks();
+        updateBookmarkTimeline();
     }
 }
 
@@ -438,8 +533,11 @@ function showBookmarkNotes(index, circle) {
             ).join('')}
         </div>
         <textarea placeholder="Add notes...">${bookmarks[index]?.notes || ''}</textarea>
-        <button>Save</button>
-        <button>Delete</button>
+        <div class="bookmark-buttons">
+            <button class="save-btn">Save</button>
+            <button class="cancel-btn">Cancel</button>
+            <button class="delete-btn">Delete</button>
+        </div>
     `;
     
     // Position the notes div
@@ -457,25 +555,38 @@ function showBookmarkNotes(index, circle) {
         });
     });
     
-    // Save button handler
-    const [saveBtn, deleteBtn] = notesDiv.querySelectorAll('button');
+    // Button handlers
+    const saveBtn = notesDiv.querySelector('.save-btn');
+    const cancelBtn = notesDiv.querySelector('.cancel-btn');
+    const deleteBtn = notesDiv.querySelector('.delete-btn');
+    
     saveBtn.addEventListener('click', () => {
         bookmarks[index].notes = notesDiv.querySelector('textarea').value;
         saveBookmarks();
+        updateBookmarkTimeline();
         notesDiv.remove();
     });
     
-    // Delete button handler
+    cancelBtn.addEventListener('click', () => {
+        notesDiv.remove();
+    });
+    
     deleteBtn.addEventListener('click', () => {
         delete bookmarks[index];
         circle.style.backgroundColor = 'transparent';
         saveBookmarks();
+        updateBookmarkTimeline();
         notesDiv.remove();
     });
     
-    // Click outside to close
+    // Click outside to close and save
     document.addEventListener('click', function closeNotes(e) {
         if (!notesDiv.contains(e.target) && e.target !== circle) {
+            // Save notes before closing
+            bookmarks[index].notes = notesDiv.querySelector('textarea').value;
+            saveBookmarks();
+            updateBookmarkTimeline();
+            
             notesDiv.remove();
             document.removeEventListener('click', closeNotes);
         }
@@ -650,3 +761,6 @@ function showBookmarkNotes(index, circle) {
     </script>
 </body>
 </html>
+
+
+
