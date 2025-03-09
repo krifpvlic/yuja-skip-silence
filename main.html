@@ -62,8 +62,7 @@
         cursor: pointer;
     }
     .bookmark-notes {
-        position: absolute;
-        right: 30px;
+        position: fixed;
         background: white;
         border: 1px solid #ccc;
         padding: 10px;
@@ -542,8 +541,35 @@ function showBookmarkNotes(index, circle) {
     
     // Position the notes div
     const rect = circle.getBoundingClientRect();
-    notesDiv.style.top = `${rect.top}px`;
     document.body.appendChild(notesDiv);
+    
+    // Calculate position to keep dialog within viewport
+    const dialogWidth = notesDiv.offsetWidth;
+    const dialogHeight = notesDiv.offsetHeight;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // Default position near the circle
+    let top = rect.top;
+    let left = rect.right + 10;
+    
+    // Adjust if it would go off the right edge
+    if (left + dialogWidth > viewportWidth) {
+        left = rect.left - dialogWidth - 10;
+    }
+    
+    // Adjust if it would go off the bottom edge
+    if (top + dialogHeight > viewportHeight) {
+        top = viewportHeight - dialogHeight - 10;
+    }
+    
+    // Adjust if it would go off the top edge
+    if (top < 10) {
+        top = 10;
+    }
+    
+    notesDiv.style.top = `${top}px`;
+    notesDiv.style.left = `${left}px`;
     
     // Color picker handlers
     notesDiv.querySelectorAll('.color-option').forEach(colorDiv => {
