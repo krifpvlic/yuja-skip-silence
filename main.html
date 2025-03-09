@@ -95,7 +95,9 @@
             document.querySelectorAll('.transcript-line').forEach(line => {
                 line.addEventListener('click', () => {
                     const index = parseInt(line.dataset.index);
-                    videoWithAudio.currentTime = subtitles[index].startTime;
+                    // Apply the same delay and stretch factor as subtitles
+                    const adjustedTime = subtitles[index].startTime * subtitleStretch + subtitleDelay;
+                    videoWithAudio.currentTime = adjustedTime;
                 });
             });
             
@@ -174,7 +176,11 @@
             const currentTime = videoWithAudio.currentTime;
             const newIndex = subtitles.findIndex((sub, index) => {
                 const nextSub = subtitles[index + 1];
-                return currentTime >= sub.startTime && (!nextSub || currentTime < nextSub.startTime);
+                // Adjust the subtitle timing with stretch and delay
+                const adjustedStartTime = sub.startTime * subtitleStretch + subtitleDelay;
+                const adjustedNextTime = nextSub ? nextSub.startTime * subtitleStretch + subtitleDelay : Infinity;
+                
+                return currentTime >= adjustedStartTime && currentTime < adjustedNextTime;
             });
 
             if (newIndex !== currentSubtitleIndex && newIndex !== -1) {
@@ -266,9 +272,11 @@
 
         document.addEventListener("keydown", (event) => {
             if (event.key === "ArrowRight") {
+                event.preventDefault(); // Prevent page scrolling
                 videoWithAudio.currentTime += seekAmount;
                 syncVideos();
             } else if (event.key === "ArrowLeft") {
+                event.preventDefault(); // Prevent page scrolling
                 videoWithAudio.currentTime -= seekAmount;
                 syncVideos();
             } else if (event.key === " " && !event.target.matches("input")) {
