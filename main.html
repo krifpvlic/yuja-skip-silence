@@ -25,9 +25,14 @@
 </head>
 <body>
     <h2>Synced Video Player</h2>
-    <input type="file" id="videoWithAudioInput" accept="video/*">
-    <input type="file" id="videoWithoutAudioInput" accept="video/*">
-    <input type="file" id="subtitleInput" accept=".srt">
+    
+    <!-- Replace individual file inputs with a folder picker -->
+    <button id="selectFolderBtn">Select Folder</button>
+    <div id="selectedFiles">
+        <p>PCI0 Video: <span id="pci0File">None</span></p>
+        <p>PCI1 Video: <span id="pci1File">None</span></p>
+        <p>Subtitle: <span id="srtFile">None</span></p>
+    </div>
     
     <div class="subtitle-controls">
         <label for="subtitleDelay">Subtitle Delay (seconds):</label>
@@ -37,8 +42,8 @@
         <input type="number" id="subtitleStretch" step="0.0001" value="1.0000" min="0.5" max="2.0">
         
         <button id="applySubtitleSettings">Apply</button>
+        <button id="saveSettings">Save Settings</button>
         <button id="toggleSubtitles">Toggle Subtitles</button>
-        <!-- <a href="chrome-extension://lmppdpldfpfdlipofacekcfleacbbncp/popup/popup.html" id="openExtension2">Open Extension</button> -->
     </div>
     
     <div class="container">
@@ -62,18 +67,137 @@
         const subtitleDelayInput = document.getElementById("subtitleDelay");
         const subtitleStretchInput = document.getElementById("subtitleStretch");
         const applySubtitleSettingsBtn = document.getElementById("applySubtitleSettings");
+        const saveSettingsBtn = document.getElementById("saveSettings");
         let subtitleDelay = 0;
         let subtitleStretch = 1.0;
         let originalSrtContent = "";
         let currentSubtitleIndex = -1;
-
-        document.getElementById("videoWithAudioInput").addEventListener("change", function(event) {
-            videoWithAudio.src = URL.createObjectURL(event.target.files[0]);
+        let subtitles = [];
+        
+        // File handling variables
+        let directoryHandle = null;
+        let pci0File = null;
+        let pci1File = null;
+        let srtFile = null;
+        
+        // Add folder selection functionality
+        document.getElementById("selectFolderBtn").addEventListener("click", async () => {
+            try {
+                directoryHandle = await window.showDirectoryPicker();
+                await processDirectory(directoryHandle);
+            } catch (error) {
+                console.error("Error selecting folder:", error);
+                alert("Error selecting folder: " + error.message);
+            }
         });
-
-        document.getElementById("videoWithoutAudioInput").addEventListener("change", function(event) {
-            videoWithoutAudio.src = URL.createObjectURL(event.target.files[0]);
-        });
+        
+        // Process the selected directory to find the required files
+        async function processDirectory(dirHandle) {
+            pci0File = null;
+            pci1File = null;
+            srtFile = null;
+            
+            for await (const entry of dirHandle.values()) {
+                if (entry.kind === 'file') {
+                    const name = entry.name.toLowerCase();
+                    
+                    if (name.includes('pci0') && (name.endsWith('.mp4') || name.endsWith('.webm') || name.endsWith('.mov'))) {
+                        pci0File = entry;
+                        document.getElementById("pci0File").textContent = entry.name;
+                    } else if (name.includes('pci1') && (name.endsWith('.mp4') || name.endsWith('.webm') || name.endsWith('.mov'))) {
+                        pci1File = entry;
+                        document.getElementById("pci1File").textContent = entry.name;
+                    } else if (name.endsWith('.srt')) {
+                        srtFile = entry;
+                        document.getElementById("srtFile").textContent = entry.name;
+                    } else if (name === 'settings.json') {
+                        // Load settings if found
+                        await loadSettings(entry);
+                    }
+                }
+            }
+            
+            // Load the files if found
+            if (pci0File && pci1File && srtFile) {
+                await loadFiles();
+            } else {
+                alert("Could not find all required files. Please ensure the folder contains files with PCI0, PCI1 in their names and a .srt file.");
+            }
+        }
+        
+        // Load the files into the player
+        async function loadFiles() {
+            try {
+                // Load PCI0 video (with audio)
+                const pci0FileObj = await pci0File.getFile();
+                videoWithAudio.src = URL.createObjectURL(pci0FileObj);
+                
+                // Load PCI1 video (without audio)
+                const pci1FileObj = await pci1File.getFile();
+                videoWithoutAudio.src = URL.createObjectURL(pci1FileObj);
+                
+                // Load subtitle file
+                const srtFileObj = await srtFile.getFile();
+                const srtContent = await srtFileObj.text();
+                originalSrtContent = srtContent;
+                updateTranscript(srtContent);
+                applySubtitleSettings();
+            } catch (error) {
+                console.error("Error loading files:", error);
+                alert("Error loading files: " + error.message);
+            }
+        }
+        
+        // Save settings to settings.json
+        async function saveSettings() {
+            if (!directoryHandle) {
+                alert("Please select a folder first");
+                return;
+            }
+            
+            const settings = {
+                subtitleDelay: parseFloat(subtitleDelayInput.value) || 0,
+                subtitleStretch: parseFloat(subtitleStretchInput.value) || 1.0
+            };
+            
+            try {
+                // Create or overwrite settings.json
+                const settingsFileHandle = await directoryHandle.getFileHandle('settings.json', { create: true });
+                const writable = await settingsFileHandle.createWritable();
+                await writable.write(JSON.stringify(settings, null, 2));
+                await writable.close();
+                alert("Settings saved successfully");
+            } catch (error) {
+                console.error("Error saving settings:", error);
+                alert("Error saving settings: " + error.message);
+            }
+        }
+        
+        // Load settings from settings.json
+        async function loadSettings(fileHandle) {
+            try {
+                const file = await fileHandle.getFile();
+                const content = await file.text();
+                const settings = JSON.parse(content);
+                
+                if (settings.subtitleDelay !== undefined) {
+                    subtitleDelayInput.value = settings.subtitleDelay;
+                    subtitleDelay = settings.subtitleDelay;
+                }
+                
+                if (settings.subtitleStretch !== undefined) {
+                    subtitleStretchInput.value = settings.subtitleStretch;
+                    subtitleStretch = settings.subtitleStretch;
+                }
+                
+                console.log("Settings loaded:", settings);
+            } catch (error) {
+                console.error("Error loading settings:", error);
+            }
+        }
+        
+        // Add event listener for save settings button
+        saveSettingsBtn.addEventListener("click", saveSettings);
 
         toggleSubtitlesBtn.addEventListener("click", () => {
             if (subtitleTrack.track.mode === "showing") {
@@ -171,7 +295,6 @@
             });
         }
 
-
         function updateActiveTranscriptLine() {
             const currentTime = videoWithAudio.currentTime;
             const newIndex = subtitles.findIndex((sub, index) => {
@@ -193,18 +316,18 @@
                 currentSubtitleIndex = newIndex;
             }
         }
-
+        
         // Modify the existing subtitle input handler
-        document.getElementById("subtitleInput").addEventListener("change", function(event) {
-            const file = event.target.files[0];
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                originalSrtContent = e.target.result;
-                updateTranscript(originalSrtContent);
-                applySubtitleSettings();
-            };
-            reader.readAsText(file);
-        });
+        // document.getElementById("subtitleInput").addEventListener("change", function(event) {
+        //     const file = event.target.files[0];
+        //     const reader = new FileReader();
+        //     reader.onload = function(e) {
+        //         originalSrtContent = e.target.result;
+        //         updateTranscript(originalSrtContent);
+        //         applySubtitleSettings();
+        //     };
+        //     reader.readAsText(file);
+        // });
 
         // Add timeupdate listener for transcript tracking
         videoWithAudio.addEventListener("timeupdate", updateActiveTranscriptLine);
@@ -239,7 +362,8 @@
                              endTime = endTime * stretch + delay;
                              
                              // Convert back to timestamp format
-                             let newH1 = Math.floor(startTime / 3600).toString().padStart(2, '0');
+                             let newH1 = Math.floor(
+                                 startTime / 3600).toString().padStart(2, '0');
                              let newM1 = Math.floor((startTime % 3600) / 60).toString().padStart(2, '0');
                              let newS1 = Math.floor(startTime % 60).toString().padStart(2, '0');
                              let newMs1 = Math.floor((startTime % 1) * 1000).toString().padStart(3, '0');
@@ -255,6 +379,58 @@
             console.log("Converted VTT data:", vtt);
             return vtt;
         }
+        async function saveSettings() {
+            if (!directoryHandle) {
+                alert("Please select a folder first");
+                return;
+            }
+            
+            const settings = {
+                subtitleDelay: parseFloat(subtitleDelayInput.value) || 0,
+                subtitleStretch: parseFloat(subtitleStretchInput.value) || 1.0
+            };
+            
+            try {
+                const settingsHandle = await directoryHandle.getFileHandle('settings.json', { create: true });
+                const writable = await settingsHandle.createWritable();
+                await writable.write(JSON.stringify(settings, null, 2));
+                await writable.close();
+                alert("Settings saved successfully");
+            } catch (error) {
+                console.error("Error saving settings:", error);
+                alert("Error saving settings: " + error.message);
+            }
+        }
+
+        // Load settings from settings.json
+        async function loadSettings() {
+            if (!directoryHandle) return;
+            
+            try {
+                const settingsHandle = await directoryHandle.getFileHandle('settings.json');
+                const file = await settingsHandle.getFile();
+                const content = await file.text();
+                const settings = JSON.parse(content);
+                
+                if (settings.subtitleDelay !== undefined) {
+                    subtitleDelayInput.value = settings.subtitleDelay;
+                    subtitleDelay = settings.subtitleDelay;
+                }
+                
+                if (settings.subtitleStretch !== undefined) {
+                    subtitleStretchInput.value = settings.subtitleStretch;
+                    subtitleStretch = settings.subtitleStretch;
+                }
+                
+                applySubtitleSettings();
+            } catch (error) {
+                console.error("Error loading settings:", error);
+            }
+        }
+
+        // Add save settings button event listener
+        document.getElementById("saveSettings").addEventListener("click", saveSettings);
+
 
         function syncVideos() {
             videoWithoutAudio.currentTime = videoWithAudio.currentTime;
