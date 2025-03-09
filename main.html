@@ -34,6 +34,7 @@
     }
         .transcript-line.active {
             background-color: #e0e0e0;
+            border-radius: 5px;
         }
         .bookmark-circle {
         width: 16px;
@@ -110,6 +111,141 @@
     .bookmark-buttons button:last-child {
         margin-right: 0;
     }
+    
+        /* Cinema Mode Styles */
+        body.cinema-mode {
+        background-color: #000;
+        color: #fff;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+    }
+    
+    .cinema-mode h2,
+    .cinema-mode #selectFolderBtn,
+    .cinema-mode #selectedFiles,
+    .cinema-mode .subtitle-controls {
+        display: none;
+    }
+    
+    .cinema-mode .cinema-controls {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        z-index: 300;
+        background-color: rgba(0,0,0,0.5);
+        padding: 10px;
+        border-radius: 5px;
+        display: flex !important;
+    }
+    
+    .cinema-mode .cinema-controls button {
+        margin-right: 10px;
+        background-color: rgba(255,255,255,0.2);
+        color: white;
+        border: 1px solid rgba(255,255,255,0.3);
+        padding: 5px 10px;
+        border-radius: 3px;
+        cursor: pointer;
+        z-index: 301;
+        position: relative;
+    }
+    
+    .cinema-mode .container {
+        position: relative;
+        width: 100vw;
+        height: calc(100vh - 100px);
+        display: block;
+    }
+    
+    .cinema-mode #videoWithAudio {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+    
+    .cinema-mode #videoWithoutAudio {
+        position: absolute;
+        top: 50px;
+        right: 20px;
+        width: 25%;
+        height: auto;
+        z-index: 100;
+        border: 1px solid #444;
+        box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        resize: both;
+        overflow: auto;
+        min-width: 200px;
+        min-height: 150px;
+    }
+    
+    .cinema-mode .transcript-wrapper {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 100px;
+        margin: 0;
+        background-color: rgba(0,0,0,0.7);
+        border-top: 1px solid #444;
+        z-index: 200;
+        transition: height 0.3s ease;
+    }
+    
+    .cinema-mode .transcript-container {
+        padding: 5px;
+        height: 90px !important;
+        overflow-y: auto !important;
+        /* transition: max-height 0.3s ease; */
+    }
+    .cinema-mode .transcript-line.active{
+        background-color: #343131;
+    }
+    
+    /* .cinema-mode .transcript-wrapper:hover .transcript-container {
+        max-height: 200px;
+    } */
+    
+    .cinema-mode .bookmark-timeline {
+        height: 100px;
+        transition: height 0.3s ease;
+    }
+    
+    /* .cinema-mode .transcript-wrapper:hover .bookmark-timeline {
+        height: 200px;
+    } */
+    
+    .cinema-mode .draggable-handle {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 20px;
+        background-color: rgba(255,255,255,0.2);
+        cursor: move;
+        z-index: 101;
+        display: block;
+    }
+    
+    .cinema-mode.side-by-side .container {
+        display: flex;
+        justify-content: space-between;
+    }
+    
+    .cinema-mode.side-by-side #videoWithAudio,
+    .cinema-mode.side-by-side #videoWithoutAudio {
+        position: relative;
+        width: 49%;
+        height: 100%;
+        top: 0;
+        right: 0;
+        resize: none;
+    }
+
+    .line-text-wrapper {
+        display: flex;
+        width: 100%;
+    }
     </style>
 </head>
 <body>
@@ -133,13 +269,19 @@
         <button id="applySubtitleSettings">Apply</button>
         <button id="saveSettings">Save Settings</button>
         <button id="toggleSubtitles">Toggle Subtitles</button>
+        <!-- <button id="toggleCinemaMode">Enter Cinema Mode</button> -->
     </div>
-    
+    <!-- <div class="cinema-controls" style="display: none;"> -->
+        <!-- <button id="exitCinemaMode">Exit Cinema Mode</button>
+        <button id="toggleSubtitlesCinema">Toggle Subtitles</button>
+        <button id="toggleLayout">Toggle Layout</button> -->
+    <!-- </div> -->
     <div class="container">
         <video id="videoWithAudio" controls>
             <track id="subtitleTrack" kind="subtitles" srclang="en" label="English" default>
         </video>
         <video id="videoWithoutAudio" muted></video>
+        <!-- <div class="draggable-handle"></div> -->
     </div>
     <div class="transcript-wrapper">
         <div id="transcript" class="transcript-container"></div>
@@ -147,6 +289,7 @@
     </div>
     </div>
     
+ 
     <script>
         const videoWithAudio = document.getElementById("videoWithAudio");
         const videoWithoutAudio = document.getElementById("videoWithoutAudio");
@@ -154,7 +297,293 @@
         const transcriptContainer = document.getElementById("transcript");
         const bookmarkTimeline = document.getElementById("bookmarkTimeline");
         const toggleSubtitlesBtn = document.getElementById("toggleSubtitles");
+        // const toggleSubtitlesCinemaBtn = document.getElementById("toggleSubtitlesCinema");
+        // const toggleCinemaModeBtn = document.getElementById("toggleCinemaMode");
+        // const exitCinemaModeBtn = document.getElementById("exitCinemaMode");
+        // const toggleLayoutBtn = document.getElementById("toggleLayout");
+        // const draggableHandle = document.querySelector(".draggable-handle");
         const seekAmount = 5; // Adjust arrow key seek time in seconds
+        
+        // Cinema mode variables
+        let isCinemaMode = false;
+        let isSideBySide = false;
+        
+        // Add cinema mode toggle functionality
+        // toggleCinemaModeBtn.addEventListener("click", enterCinemaMode);
+        // exitCinemaModeBtn.addEventListener("click", exitCinemaMode);
+        // toggleLayoutBtn.addEventListener("click", toggleLayout);
+        
+                // Make the second video draggable in cinema mode
+        //         let isDragging = false;
+        // let dragOffsetX = 0;
+        // let dragOffsetY = 0;
+        
+        // draggableHandle.addEventListener("mousedown", (e) => {
+        //     if (!isCinemaMode || isSideBySide) return;
+        //     isDragging = true;
+        //     dragOffsetX = e.clientX - videoWithoutAudio.getBoundingClientRect().left;
+        //     dragOffsetY = e.clientY - videoWithoutAudio.getBoundingClientRect().top;
+        //     e.preventDefault(); // Prevent text selection during drag
+        // });
+        
+        // document.addEventListener("mousemove", (e) => {
+        //     if (!isDragging) return;
+            
+        //     const containerRect = document.querySelector(".container").getBoundingClientRect();
+        //     let newLeft = e.clientX - dragOffsetX;
+        //     let newTop = e.clientY - dragOffsetY;
+            
+        //     // Keep within container bounds
+        //     newLeft = Math.max(0, Math.min(newLeft, containerRect.width - videoWithoutAudio.offsetWidth));
+        //     newTop = Math.max(0, Math.min(newTop, containerRect.height - videoWithoutAudio.offsetHeight));
+            
+        //     videoWithoutAudio.style.position = "absolute";
+        //     videoWithoutAudio.style.left = newLeft + "px";
+        //     videoWithoutAudio.style.top = newTop + "px";
+        //     videoWithoutAudio.style.right = "auto";
+            
+        //     e.preventDefault(); // Prevent text selection during drag
+        // });
+        
+        // document.addEventListener("mouseup", () => {
+        //     isDragging = false;
+        // });
+        
+        // Double click on second video to toggle layout
+        videoWithoutAudio.addEventListener("dblclick", (e) => {
+            if (isCinemaMode) {
+                toggleLayout();
+            }
+        });
+        
+        // Double click on main video to toggle layout
+        videoWithAudio.addEventListener("dblclick", (e) => {
+            if (isCinemaMode) {
+                toggleLayout();
+            }
+        });
+        
+        function enterCinemaMode() {
+            isCinemaMode = true;
+            document.body.classList.add("cinema-mode");
+            document.querySelector(".cinema-controls").style.display = "block";
+            document.querySelector(".subtitle-controls").style.display = "none";
+            //change the size of transcript to flex
+            // document.querySelector(".transcript").style.height = "100%";
+
+            // Make sure the transcript is still scrollable
+            // document.querySelector('.transcript-container').style.overflowY = 'auto';
+            
+            // Limit transcript to show only 3 lines initially
+            // limitVisibleTranscriptLines(3);
+            
+            // Update the bookmark timeline for cinema mode
+            updateBookmarkTimeline();
+            
+            // Make sure the second video is draggable and resizable
+            videoWithoutAudio.style.resize = 'both';
+            videoWithoutAudio.style.overflow = 'auto';
+        }
+        
+        function exitCinemaMode() {
+            isCinemaMode = false;
+            isSideBySide = false;
+            document.body.classList.remove("cinema-mode", "side-by-side");
+            document.querySelector(".cinema-controls").style.display = "none";
+            document.querySelector(".subtitle-controls").style.display = "block";
+            
+            // Reset video styles
+            videoWithoutAudio.style.position = "";
+            videoWithoutAudio.style.top = "";
+            videoWithoutAudio.style.right = "";
+            videoWithoutAudio.style.left = "";
+            videoWithoutAudio.style.width = "";
+            videoWithoutAudio.style.height = "";
+            videoWithoutAudio.style.resize = "";
+            videoWithoutAudio.style.overflow = "";
+            
+            // Reset transcript
+            document.querySelectorAll('.transcript-line').forEach(line => {
+                line.style.display = "flex";
+            });
+            
+            // Update the bookmark timeline for normal mode
+            updateBookmarkTimeline();
+        }
+        function toggleLayout() {
+            if (!isCinemaMode) return;
+            
+            isSideBySide = !isSideBySide;
+            
+            if (isSideBySide) {
+                document.body.classList.add("side-by-side");
+                videoWithoutAudio.style.position = "";
+                videoWithoutAudio.style.top = "";
+                videoWithoutAudio.style.right = "";
+                videoWithoutAudio.style.left = "";
+            } else {
+                document.body.classList.remove("side-by-side");
+                videoWithoutAudio.style.position = "absolute";
+                videoWithoutAudio.style.top = "10px";
+                videoWithoutAudio.style.right = "10px";
+                videoWithoutAudio.style.left = "auto";
+            }
+        }
+        
+        function limitVisibleTranscriptLines(count) {
+            if (!isCinemaMode) return;
+            
+            const lines = document.querySelectorAll('.transcript-line');
+            const activeIndex = currentSubtitleIndex !== -1 ? currentSubtitleIndex : 0;
+            
+            // Hide all lines first
+            lines.forEach(line => {
+                line.style.display = "none";
+            });
+            
+            // Show only the specified number of lines around the active one
+            const halfCount = Math.floor(count / 2);
+            const startIndex = Math.max(0, activeIndex - halfCount);
+            const endIndex = Math.min(lines.length - 1, activeIndex + halfCount);
+            
+            for (let i = startIndex; i <= endIndex; i++) {
+                const line = document.querySelector(`.transcript-line[data-index="${i}"]`);
+                if (line) {
+                    line.style.display = "flex";
+                }
+            }
+        }
+        
+        // Modify the transcript wrapper hover behavior
+        const transcriptWrapper = document.querySelector('.transcript-wrapper');
+        // transcriptWrapper.addEventListener('mouseenter', () => {
+        //     if (isCinemaMode) {
+        //         limitVisibleTranscriptLines(5);
+        //     }
+        // });
+        // transcriptWrapper.addEventListener('mouseenter', () => {
+        //     if (isCinemaMode) {
+        //         limitVisibleTranscriptLines(5);
+        //     }
+        // });
+        
+        // transcriptWrapper.addEventListener('mouseleave', () => {
+        //     if (isCinemaMode) {
+        //         limitVisibleTranscriptLines(3);
+        //     }
+        // });
+        
+        // Modify the updateActiveTranscriptLine function to handle cinema mode
+        const originalUpdateActiveTranscriptLine = updateActiveTranscriptLine;
+        updateActiveTranscriptLine = function() {
+            originalUpdateActiveTranscriptLine();
+            
+            // If in cinema mode, limit visible lines
+            // if (isCinemaMode) {
+            //     limitVisibleTranscriptLines(3);
+            // }
+        };
+        
+        // Add cinema mode toggle button
+        const cinemaModeBtn = document.createElement('button');
+        cinemaModeBtn.id = 'toggleCinemaMode';
+        cinemaModeBtn.textContent = 'Enter Cinema Mode';
+        cinemaModeBtn.addEventListener('click', enterCinemaMode);
+        
+        // Add the button to the subtitle controls
+        document.querySelector('.subtitle-controls').appendChild(cinemaModeBtn);
+        
+              // Create cinema controls
+              const cinemaControls = document.createElement('div');
+        cinemaControls.className = 'cinema-controls';
+        cinemaControls.style.display = 'none';
+        cinemaControls.innerHTML = `
+            <button id="exitCinemaMode">Exit Cinema Mode</button>
+            <button id="toggleSubtitlesCinema">Toggle Subtitles</button>
+            <button id="toggleLayout">Toggle Layout</button>
+        `;
+        document.body.appendChild(cinemaControls);
+        
+        // Add event listeners for cinema controls
+        document.getElementById('exitCinemaMode').addEventListener('click', (e) => {
+            exitCinemaMode();
+            e.stopPropagation(); // Prevent event from bubbling up
+        });
+        
+        document.getElementById('toggleSubtitlesCinema').addEventListener('click', (e) => {
+            if (subtitleTrack.track.mode === "showing") {
+                subtitleTrack.track.mode = "hidden";
+                document.getElementById('toggleSubtitlesCinema').textContent = "Show Subtitles";
+            } else {
+                subtitleTrack.track.mode = "showing";
+                document.getElementById('toggleSubtitlesCinema').textContent = "Hide Subtitles";
+            }
+            e.stopPropagation(); // Prevent event from bubbling up
+        });
+        
+        document.getElementById('toggleLayout').addEventListener('click', (e) => {
+            toggleLayout();
+            e.stopPropagation(); // Prevent event from bubbling up
+        });
+        
+        // Add draggable handle for the second video
+        // const handle = document.createElement('div');
+        // handle.className = 'draggable-handle';
+        // document.querySelector('.container').appendChild(handle);
+        let isDragging = false;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+        const draggableHandle = document.querySelector("#videoWithoutAudio");
+     draggableHandle.addEventListener("mousedown", (e) => {
+        console.log("mousedown");
+            if (!isCinemaMode || isSideBySide) return;
+            isDragging = true;
+            dragOffsetX = e.clientX - videoWithoutAudio.getBoundingClientRect().left;
+            dragOffsetY = e.clientY - videoWithoutAudio.getBoundingClientRect().top;
+            e.preventDefault(); // Prevent text selection during drag
+        });
+        
+        document.addEventListener("mousemove", (e) => {
+            if (!isDragging) return;
+            
+            const containerRect = document.querySelector(".container").getBoundingClientRect();
+            let newLeft = e.clientX - dragOffsetX;
+            let newTop = e.clientY - dragOffsetY;
+            
+            // Keep within container bounds
+            newLeft = Math.max(0, Math.min(newLeft, containerRect.width - videoWithoutAudio.offsetWidth));
+            newTop = Math.max(0, Math.min(newTop, containerRect.height - videoWithoutAudio.offsetHeight));
+            
+            videoWithoutAudio.style.position = "absolute";
+            videoWithoutAudio.style.left = newLeft + "px";
+            videoWithoutAudio.style.top = newTop + "px";
+            videoWithoutAudio.style.right = "auto";
+            
+            e.preventDefault(); // Prevent text selection during drag
+        });
+        
+        document.addEventListener("mouseup", () => {
+            isDragging = false;
+        });
+  
+        // Add event listeners to disable default video controls
+        videoWithAudio.addEventListener('click', function(e) {
+            // Prevent the default click behavior (play/pause)
+            e.preventDefault();
+            
+            // If in cinema mode, handle double click for layout toggle
+            // Single clicks won't trigger play/pause anymore
+        });
+        
+        // Prevent spacebar from triggering play/pause
+        videoWithAudio.addEventListener('keydown', function(e) {
+            if (e.key === " " || e.code === "Space") {
+                if(videoWithAudio.paused)
+                videoWithAudio.play();
+            else videoWithAudio.pause();
+            }
+        });
+        
         
         // Subtitle timing control variables
         const subtitleDelayInput = document.getElementById("subtitleDelay");
@@ -403,7 +832,9 @@
                 ${subtitles
                     .map((sub, index) => `
                         <div class="transcript-line" data-index="${index}">
+                            <div class="line-text-wrapper">
                             <span>${sub.text}</span>
+                            </div>
                             <div class="bookmark-circle" data-index="${index}" 
                                  style="background-color: ${bookmarks[index]?.color || 'transparent'}">
                             </div>
@@ -416,7 +847,7 @@
                 const index = parseInt(line.dataset.index);
                 
                 // Text click handler
-                line.querySelector('span').addEventListener('click', () => {
+                line.querySelector('.line-text-wrapper').addEventListener('click', () => {
                     const adjustedTime = subtitles[index].startTime * subtitleStretch + subtitleDelay;
                     videoWithAudio.currentTime = adjustedTime;
                 });
@@ -591,10 +1022,12 @@ function showBookmarkNotes(index, circle) {
         saveBookmarks();
         updateBookmarkTimeline();
         notesDiv.remove();
+        document.removeEventListener('click', closeNotes); // Remove the event listener
     });
     
     cancelBtn.addEventListener('click', () => {
         notesDiv.remove();
+        document.removeEventListener('click', closeNotes); // Remove the event listener
     });
     
     deleteBtn.addEventListener('click', () => {
@@ -603,6 +1036,7 @@ function showBookmarkNotes(index, circle) {
         saveBookmarks();
         updateBookmarkTimeline();
         notesDiv.remove();
+        document.removeEventListener('click', closeNotes); // Remove the event listener
     });
     
     // Click outside to close and save
@@ -761,6 +1195,7 @@ function showBookmarkNotes(index, circle) {
         videoWithAudio.addEventListener("ratechange", () => videoWithoutAudio.playbackRate = videoWithAudio.playbackRate);
         videoWithAudio.addEventListener("seeked", syncVideos);
         videoWithAudio.addEventListener("timeupdate", syncVideos);
+        
 
         document.addEventListener("keydown", (event) => {
             if (event.key === "ArrowRight") {
@@ -787,6 +1222,3 @@ function showBookmarkNotes(index, circle) {
     </script>
 </body>
 </html>
-
-
-
