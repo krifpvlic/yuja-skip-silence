@@ -242,6 +242,11 @@
         resize: none;
     }
 
+    /* Cinema mode without subtitles - full screen video */
+    .cinema-mode.no-subtitles .container {
+        height: 100vh;
+    }
+
     .line-text-wrapper {
         display: flex;
         width: 100%;
@@ -368,10 +373,12 @@
             document.body.classList.add("cinema-mode");
             document.querySelector(".cinema-controls").style.display = "block";
             document.querySelector(".subtitle-controls").style.display = "none";
+            document.getElementById("toggleCinemaMode").style.display = "none";
             
-            // Hide transcript wrapper in cinema mode if no subtitles
+            // Hide transcript wrapper in cinema mode if no subtitles and add no-subtitles class for full screen
             if (!hasSubtitles) {
                 document.querySelector(".transcript-wrapper").style.display = "none";
+                document.body.classList.add("no-subtitles");
             }
             
             //change the size of transcript to flex
@@ -394,8 +401,9 @@
         function exitCinemaMode() {
             isCinemaMode = false;
             isSideBySide = false;
-            document.body.classList.remove("cinema-mode", "side-by-side");
+            document.body.classList.remove("cinema-mode", "side-by-side", "no-subtitles");
             document.querySelector(".cinema-controls").style.display = "none";
+            document.getElementById("toggleCinemaMode").style.display = "inline-block";
             
             // Only show subtitle controls and transcript if subtitles are available
             if (hasSubtitles) {
