@@ -501,8 +501,8 @@
         cinemaModeBtn.textContent = 'Enter Cinema Mode';
         cinemaModeBtn.addEventListener('click', enterCinemaMode);
         
-        // Add the button to the subtitle controls
-        document.querySelector('.subtitle-controls').appendChild(cinemaModeBtn);
+        // Add the button after the subtitle controls (so it's always visible)
+        document.querySelector('.subtitle-controls').insertAdjacentElement('afterend', cinemaModeBtn);
         
               // Create cinema controls
               const cinemaControls = document.createElement('div');
