@@ -256,7 +256,7 @@
     <div id="selectedFiles">
         <p>PCI0 Video: <span id="pci0File">None</span></p>
         <p>PCI1 Video: <span id="pci1File">None</span></p>
-        <p>Subtitle: <span id="srtFile">None</span></p>
+        <p>Subtitle: <span id="srtFile">None (optional)</span></p>
     </div>
     
     <div class="subtitle-controls">
@@ -368,6 +368,12 @@
             document.body.classList.add("cinema-mode");
             document.querySelector(".cinema-controls").style.display = "block";
             document.querySelector(".subtitle-controls").style.display = "none";
+            
+            // Hide transcript wrapper in cinema mode if no subtitles
+            if (!hasSubtitles) {
+                document.querySelector(".transcript-wrapper").style.display = "none";
+            }
+            
             //change the size of transcript to flex
             // document.querySelector(".transcript").style.height = "100%";
 
@@ -390,7 +396,12 @@
             isSideBySide = false;
             document.body.classList.remove("cinema-mode", "side-by-side");
             document.querySelector(".cinema-controls").style.display = "none";
-            document.querySelector(".subtitle-controls").style.display = "block";
+            
+            // Only show subtitle controls and transcript if subtitles are available
+            if (hasSubtitles) {
+                document.querySelector(".subtitle-controls").style.display = "block";
+                document.querySelector(".transcript-wrapper").style.display = "flex";
+            }
             
             // Reset video styles
             videoWithoutAudio.style.position = "";
@@ -601,6 +612,29 @@
         let pci0File = null;
         let pci1File = null;
         let srtFile = null;
+        let hasSubtitles = false;
+        
+        // Function to show/hide subtitle UI elements
+        function showSubtitleUI(show) {
+            hasSubtitles = show;
+            const subtitleControls = document.querySelector('.subtitle-controls');
+            const transcriptWrapper = document.querySelector('.transcript-wrapper');
+            const toggleSubtitlesCinemaBtn = document.getElementById('toggleSubtitlesCinema');
+            
+            if (show) {
+                subtitleControls.style.display = 'block';
+                transcriptWrapper.style.display = 'flex';
+                if (toggleSubtitlesCinemaBtn) toggleSubtitlesCinemaBtn.style.display = 'inline-block';
+            } else {
+                subtitleControls.style.display = 'none';
+                transcriptWrapper.style.display = 'none';
+                if (toggleSubtitlesCinemaBtn) toggleSubtitlesCinemaBtn.style.display = 'none';
+                // Clear subtitles
+                subtitles = [];
+                transcriptContainer.innerHTML = '';
+                subtitleTrack.src = '';
+            }
+        }
         
         // Add variables for tracking video position
         let lastSavedPosition = 0;
@@ -646,11 +680,11 @@
             await loadBookmarks();
 
             
-            // Load the files if found
-            if (pci0File && pci1File && srtFile) {
+            // Load the files if found (subtitles are now optional)
+            if (pci0File && pci1File) {
                 await loadFiles();
             } else {
-                alert("Could not find all required files. Please ensure the folder contains files with PCI0, PCI1 in their names and a .srt file.");
+                alert("Could not find required video files. Please ensure the folder contains files with PCI0 and PCI1 in their names.");
             }
         }
         
@@ -665,12 +699,18 @@
                 const pci1FileObj = await pci1File.getFile();
                 videoWithoutAudio.src = URL.createObjectURL(pci1FileObj);
                 
-                // Load subtitle file
-                const srtFileObj = await srtFile.getFile();
-                const srtContent = await srtFileObj.text();
-                originalSrtContent = srtContent;
-                updateTranscript(srtContent);
-                applySubtitleSettings();
+                // Load subtitle file if available
+                if (srtFile) {
+                    const srtFileObj = await srtFile.getFile();
+                    const srtContent = await srtFileObj.text();
+                    originalSrtContent = srtContent;
+                    updateTranscript(srtContent);
+                    applySubtitleSettings();
+                    showSubtitleUI(true);
+                } else {
+                    // Hide subtitle-related UI when no subtitles
+                    showSubtitleUI(false);
+                }
                 
                 // Set up video position tracking
                 videoWithAudio.addEventListener("loadedmetadata", () => {
